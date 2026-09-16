@@ -57,6 +57,26 @@ class GameScene extends Phaser.Scene {
       stroke:'#6a351c',strokeThickness:4
     }).setOrigin(.5).setDepth(20)
 
+    this.scoreText = this.add.text(W-16,16,'',{
+      fontFamily:'Arial Black, Arial',fontSize:'22px',color:'#ffffff',
+      stroke:'#6a351c',strokeThickness:5
+    }).setOrigin(1,0).setDepth(20)
+
+    this.shotsText = this.add.text(W-16,46,'',{
+      fontFamily:'Arial Black, Arial',fontSize:'16px',color:'#fff7d6',
+      stroke:'#6a351c',strokeThickness:4
+    }).setOrigin(1,0).setDepth(20)
+
+    this.updateScoreboard()
+
+    this.messageText = this.add.text(W/2,H-34,'',{
+      fontFamily:'Arial',fontStyle:'bold',fontSize:'15px',color:'#7d2d17',
+      backgroundColor:'#fff7e8',padding:{x:14,y:8}
+    }).setOrigin(.5).setDepth(20)
+    this.updateMessage()
+
+    this.drawRestartButton()
+
     this.slingX = 175
     this.slingY = this.groundY - 124
     this.maxPull = 120
@@ -194,7 +214,31 @@ class GameScene extends Phaser.Scene {
     this.releaseMotion={x:this.puff.x,y:this.puff.y,angle:this.puff.rotation,dx,dy,elapsed:0}
     this.sound.play('yipee')
     shots.value++
+    this.updateScoreboard()
     message.value='Curry puff away! Hit the kopi cup mountain!'
+    this.updateMessage()
+  }
+
+  updateScoreboard(){
+    this.scoreText.setText(`SCORE: ${score.value.toLocaleString()} / 8,000`)
+    this.shotsText.setText(`SHOTS: ${shots.value} / ${maxShots}`)
+  }
+
+  updateMessage(){
+    this.messageText.setText(message.value)
+  }
+
+  drawRestartButton(){
+    const x=16,y=16,w=118,h=36
+    const bg=this.add.graphics().setDepth(20)
+    bg.fillStyle(0xfff7e8,0.95).fillRoundedRect(x,y,w,h,10)
+    bg.lineStyle(3,0x7d2d17,1).strokeRoundedRect(x,y,w,h,10)
+    bg.setInteractive(new Phaser.Geom.Rectangle(x,y,w,h),Phaser.Geom.Rectangle.Contains)
+    bg.input.cursor='pointer'
+    bg.on('pointerdown',()=>restart())
+    this.add.text(x+w/2,y+h/2,'RESTART',{
+      fontFamily:'Arial Black, Arial',fontSize:'14px',color:'#7d2d17'
+    }).setOrigin(.5).setDepth(21)
   }
 
   updateSlingshot(delta){
@@ -243,6 +287,7 @@ class GameScene extends Phaser.Scene {
     if(cup.getData('scored')) return
     cup.setData('scored',true)
     score.value=Math.min(8000,score.value+100)
+    this.updateScoreboard()
 
     const x=cup.x,y=cup.y
     this.cups=this.cups.filter(c => c!==cup)
@@ -269,6 +314,7 @@ class GameScene extends Phaser.Scene {
     } else {
       message.value=`${score.value.toLocaleString()} / 8,000 cups! Keep going!`
     }
+    this.updateMessage()
   }
 
   celebrate(){
@@ -310,6 +356,7 @@ class GameScene extends Phaser.Scene {
     } else {
       message.value = 'Pull the curry puff backwards and release!'
     }
+    this.updateMessage()
   }
 
   drawSlingshot(){
@@ -400,30 +447,8 @@ onBeforeUnmount(()=>game?.destroy(true))
 </script>
 
 <template>
-  <main class="page">
-    <section class="hero">
-      <div>
-        <p class="eyebrow">THONG KEE CELEBRATION GAME</p>
-        <h1>8,000 Cups Kopi Tarik Challenge</h1>
-        <p>Pull the curry puff, smash the mountain of kopi cups and race toward the 8,000-point milestone.</p>
-      </div>
-      <div class="scoreboard">
-        <div><small>SCORE</small><strong>{{ score.toLocaleString() }}</strong><span>/ 8,000</span></div>
-        <div><small>SHOTS</small><strong>{{ shots }} / {{ maxShots }}</strong></div>
-      </div>
-    </section>
-
-    <div class="progress"><div :style="{width:(score/80)+'%'}"></div></div>
-
-    <section class="game-shell">
-      <div ref="gameHost" class="game"></div>
-      <div class="status">{{ message }}</div>
-    </section>
-
-    <section class="bottom">
-      <p><strong>How to play:</strong> drag the curry puff backwards from the slingshot and release. Each destroyed cup is worth 100 points. You have {{ maxShots }} shots to destroy as many of the 80 cups as you can.</p>
-      <button @click="restart">Restart Game</button>
-    </section>
+  <main class="stage">
+    <div ref="gameHost" class="game"></div>
 
     <div v-if="showEndScreen" class="end-overlay">
       <div class="end-card">
