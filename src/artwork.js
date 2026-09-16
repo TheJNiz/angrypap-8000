@@ -47,6 +47,44 @@ const frames = {
 // to alias.
 const softenBelow = {cup:110, puff:110}
 
+// Repeatedly halves `sourceImg` (a Phaser Image, already positioned at
+// origin 0,0) down below maxDim, then scales that softened result back up
+// to fullW x fullH into a dynamic texture at `outKey`. Every individual
+// halving stays within plain bilinear filtering's comfort zone, so no
+// single big downscale is left to alias fine detail into blocky mush.
+function bakeSoftened(scene,sourceImg,fullW,fullH,maxDim,outKey){
+  let stepKey='soften-tmp',w=fullW,h=fullH
+  scene.textures.addDynamicTexture(stepKey,w,h).draw(sourceImg)
+  while(Math.max(w,h)>maxDim){
+    const nw=Math.max(1,Math.round(w/2)), nh=Math.max(1,Math.round(h/2))
+    const half=scene.make.image({x:0,y:0,key:stepKey},false).setOrigin(0).setDisplaySize(nw,nh)
+    const nextKey=stepKey+'-'+nw
+    scene.textures.addDynamicTexture(nextKey,nw,nh).draw(half)
+    half.destroy()
+    scene.textures.remove(stepKey)
+    stepKey=nextKey; w=nw; h=nh
+  }
+  const softened=scene.make.image({x:0,y:0,key:stepKey},false).setOrigin(0).setDisplaySize(fullW,fullH)
+  scene.textures.addDynamicTexture(outKey,fullW,fullH).draw(softened)
+  softened.destroy()
+  scene.textures.remove(stepKey)
+}
+
+// Same fix as the cup/puff art below, for a plain whole-image texture
+// (no sheet crop or mask involved) like a loaded logo. Returns the key to
+// actually render — either a new pre-softened texture, or the original
+// key unchanged if it's already small enough that softening buys nothing.
+export function softenTexture(scene,key,maxDim){
+  const outKey=key+'-soft'
+  if(scene.textures.exists(outKey)) return outKey
+  const src=scene.textures.get(key).getSourceImage()
+  if(Math.max(src.width,src.height)<=maxDim) return key
+  const img=scene.make.image({x:0,y:0,key},false).setOrigin(0)
+  bakeSoftened(scene,img,src.width,src.height,maxDim,outKey)
+  img.destroy()
+  return outKey
+}
+
 export function registerArtwork(scene){
   for(const [name,{sheet,rect,outline}] of Object.entries(frames)){
     const key='art-'+name
@@ -61,36 +99,11 @@ export function registerArtwork(scene){
     const mask=shape.createGeometryMask()
     sprite.setMask(mask)
 
-    const [fullW,fullH]=[rect[2],rect[3]]
-    const maxDim=softenBelow[name]
-    if(!maxDim){
-      scene.textures.addDynamicTexture(key,fullW,fullH).draw(sprite)
-      sprite.clearMask()
-      mask.destroy()
-      shape.destroy()
-      sprite.destroy()
-      continue
-    }
-
-    let stepKey='clip-'+name, w=fullW, h=fullH
-    scene.textures.addDynamicTexture(stepKey,w,h).draw(sprite)
+    bakeSoftened(scene,sprite,rect[2],rect[3],softenBelow[name]||Infinity,key)
     sprite.clearMask()
     mask.destroy()
     shape.destroy()
     sprite.destroy()
-    while(Math.max(w,h)>maxDim){
-      const nw=Math.max(1,Math.round(w/2)), nh=Math.max(1,Math.round(h/2))
-      const half=scene.make.image({x:0,y:0,key:stepKey},false).setOrigin(0).setDisplaySize(nw,nh)
-      const nextKey=stepKey+'-'+nw
-      scene.textures.addDynamicTexture(nextKey,nw,nh).draw(half)
-      half.destroy()
-      scene.textures.remove(stepKey)
-      stepKey=nextKey; w=nw; h=nh
-    }
-    const softened=scene.make.image({x:0,y:0,key:stepKey},false).setOrigin(0).setDisplaySize(fullW,fullH)
-    scene.textures.addDynamicTexture(key,fullW,fullH).draw(softened)
-    softened.destroy()
-    scene.textures.remove(stepKey)
   }
 }
 

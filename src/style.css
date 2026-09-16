@@ -1,7 +1,7 @@
 
 *{box-sizing:border-box}
-html,body,#app{margin:0;height:100%;overflow:hidden;font-family:Inter,Arial,sans-serif;background:#7bd2f5;color:#442315}
-.stage{position:fixed;inset:0;background:#7bd2f5}
+html,body,#app{margin:0;height:100%;overflow:hidden;font-family:Inter,Arial,sans-serif;background:#fdecad;color:#442315}
+.stage{position:fixed;inset:0;background:#fdecad}
 .game{position:absolute;inset:0;touch-action:none}
 .game canvas{display:block!important}
 
