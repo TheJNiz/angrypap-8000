@@ -35,6 +35,18 @@ const frames = {
   ]}
 }
 
+// Frames the scene displays much smaller than their source crop (cup, puff)
+// get pre-softened before baking. Phaser's single-step bilinear downscale
+// from e.g. 419px source cup art down to a ~44px sprite aliases fine print
+// like the cup's logo into blocky mush — there's no mipmapping here to
+// average it away. Repeatedly halving keeps every individual step small
+// enough for plain bilinear filtering to stay clean, then scaling that
+// softened result back up to the original crop size means the in-game
+// scale-down (still driven by the same rect dimensions, so nothing about
+// physics/layout math elsewhere has to change) has no sharp detail left
+// to alias.
+const softenBelow = {cup:110, puff:110}
+
 export function registerArtwork(scene){
   for(const [name,{sheet,rect,outline}] of Object.entries(frames)){
     const key='art-'+name
@@ -48,11 +60,37 @@ export function registerArtwork(scene){
     shape.fillStyle(0xffffff).fillPoints(outline.map(([x,y])=>({x:x-rect[0],y:y-rect[1]})),true)
     const mask=shape.createGeometryMask()
     sprite.setMask(mask)
-    scene.textures.addDynamicTexture(key,rect[2],rect[3]).draw(sprite)
+
+    const [fullW,fullH]=[rect[2],rect[3]]
+    const maxDim=softenBelow[name]
+    if(!maxDim){
+      scene.textures.addDynamicTexture(key,fullW,fullH).draw(sprite)
+      sprite.clearMask()
+      mask.destroy()
+      shape.destroy()
+      sprite.destroy()
+      continue
+    }
+
+    let stepKey='clip-'+name, w=fullW, h=fullH
+    scene.textures.addDynamicTexture(stepKey,w,h).draw(sprite)
     sprite.clearMask()
     mask.destroy()
     shape.destroy()
     sprite.destroy()
+    while(Math.max(w,h)>maxDim){
+      const nw=Math.max(1,Math.round(w/2)), nh=Math.max(1,Math.round(h/2))
+      const half=scene.make.image({x:0,y:0,key:stepKey},false).setOrigin(0).setDisplaySize(nw,nh)
+      const nextKey=stepKey+'-'+nw
+      scene.textures.addDynamicTexture(nextKey,nw,nh).draw(half)
+      half.destroy()
+      scene.textures.remove(stepKey)
+      stepKey=nextKey; w=nw; h=nh
+    }
+    const softened=scene.make.image({x:0,y:0,key:stepKey},false).setOrigin(0).setDisplaySize(fullW,fullH)
+    scene.textures.addDynamicTexture(key,fullW,fullH).draw(softened)
+    softened.destroy()
+    scene.textures.remove(stepKey)
   }
 }
 
