@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref } from 'vue'
 import Phaser from 'phaser'
-import { registerArtwork, clipArtwork } from './artwork'
+import { registerArtwork, clipArtwork, softenTexture } from './artwork'
 
 const gameHost = ref(null)
 const score = ref(0)
@@ -23,6 +23,8 @@ class GameScene extends Phaser.Scene {
     this.load.image('sling-sheet',asset('assets/cartoon/slingshot-sheet.png'))
     this.load.image('puff-sheet',asset('assets/cartoon/puff-sheet.png'))
     this.load.image('cup-sheet',asset('assets/cartoon/cup-sheet.png'))
+    this.load.image('thongkee-logo',asset('assets/thongkee-logo.png'))
+    this.load.image('foodtale-logo',asset('assets/foodtale-logo.png'))
     this.load.audio('yipee',asset('assets/sounds/yipee.mp3'))
     this.load.audio('bgm',asset('assets/sounds/bgm.mp3'))
   }
@@ -34,7 +36,11 @@ class GameScene extends Phaser.Scene {
     // Keep the landscape proportional; extend the clear sky above it.
     const background = this.textures.get('bg').getSourceImage()
     const backgroundScale = W / background.width
-    const backgroundY = this.groundY - background.height * .5 * backgroundScale
+    // The grass line in background.jpg sits at ~63% of the image height, not
+    // the middle — align that row with groundY, or the slingshot and cup
+    // mountain (placed at groundY) appear to float above the art's grass.
+    const backgroundGrassFraction = .633
+    const backgroundY = this.groundY - background.height * backgroundGrassFraction * backgroundScale
     const sky = this.textures.getPixel(Math.floor(background.width/2),0,'bg').color
     this.add.rectangle(0,0,W,H,sky).setOrigin(0)
     this.background = this.add.image(0,backgroundY,'bg').setOrigin(0).setScale(backgroundScale)
@@ -56,6 +62,50 @@ class GameScene extends Phaser.Scene {
       fontFamily:'Arial',fontStyle:'bold',fontSize:'15px',color:'#fff7d6',
       stroke:'#6a351c',strokeThickness:4
     }).setOrigin(.5).setDepth(20)
+
+    // Brand credits, centered under the subtitle in a white rounded card.
+    // Foodtale's logo is a wide wordmark, so it's sized narrower/shorter
+    // than Thong Kee's near-square character mark rather than matching
+    // height 1:1 — that would make the wordmark absurdly wide.
+    const logoGap=12, cardPad=14
+    // Both logos are drawn far smaller than their source resolution
+    // (5-7x downscale) with no mipmapping to smooth that out, so the fine
+    // linework aliases into blocky noise — pre-soften them first, same fix
+    // as the cup/puff art in artwork.js.
+    const tkLogo=this.add.image(0,0,softenTexture(this,'thongkee-logo',140)).setOrigin(0,.5).setDepth(21)
+    tkLogo.setScale(64/tkLogo.height)
+    const ftLogo=this.add.image(0,0,softenTexture(this,'foodtale-logo',280)).setOrigin(0,.5).setDepth(21)
+    ftLogo.setScale(40/ftLogo.height)
+    const cardW=tkLogo.displayWidth+logoGap+ftLogo.displayWidth+cardPad*2
+    const cardH=Math.max(tkLogo.displayHeight,ftLogo.displayHeight)+cardPad*2
+    const cardX=W/2-cardW/2, cardY=90
+    this.add.graphics().setDepth(20)
+      .fillStyle(0xffffff,0.92).fillRoundedRect(cardX,cardY,cardW,cardH,14)
+      .lineStyle(2,0x7d2d17,.35).strokeRoundedRect(cardX,cardY,cardW,cardH,14)
+    let logoX=cardX+cardPad
+    tkLogo.setPosition(logoX,cardY+cardH/2)
+    logoX+=tkLogo.displayWidth+logoGap
+    ftLogo.setPosition(logoX,cardY+cardH/2)
+
+    this.scoreText = this.add.text(W-16,16,'',{
+      fontFamily:'Arial Black, Arial',fontSize:'22px',color:'#ffffff',
+      stroke:'#6a351c',strokeThickness:5
+    }).setOrigin(1,0).setDepth(20)
+
+    this.shotsText = this.add.text(W-16,46,'',{
+      fontFamily:'Arial Black, Arial',fontSize:'16px',color:'#fff7d6',
+      stroke:'#6a351c',strokeThickness:4
+    }).setOrigin(1,0).setDepth(20)
+
+    this.updateScoreboard()
+
+    this.messageText = this.add.text(W/2,H-34,'',{
+      fontFamily:'Arial',fontStyle:'bold',fontSize:'15px',color:'#7d2d17',
+      backgroundColor:'#fff7e8',padding:{x:14,y:8}
+    }).setOrigin(.5).setDepth(20)
+    this.updateMessage()
+
+    this.drawRestartButton()
 
     this.slingX = 175
     this.slingY = this.groundY - 124
@@ -194,7 +244,31 @@ class GameScene extends Phaser.Scene {
     this.releaseMotion={x:this.puff.x,y:this.puff.y,angle:this.puff.rotation,dx,dy,elapsed:0}
     this.sound.play('yipee')
     shots.value++
+    this.updateScoreboard()
     message.value='Curry puff away! Hit the kopi cup mountain!'
+    this.updateMessage()
+  }
+
+  updateScoreboard(){
+    this.scoreText.setText(`SCORE: ${score.value.toLocaleString()} / 8,000`)
+    this.shotsText.setText(`SHOTS: ${shots.value} / ${maxShots}`)
+  }
+
+  updateMessage(){
+    this.messageText.setText(message.value)
+  }
+
+  drawRestartButton(){
+    const x=16,y=16,w=118,h=36
+    const bg=this.add.graphics().setDepth(20)
+    bg.fillStyle(0xfff7e8,0.95).fillRoundedRect(x,y,w,h,10)
+    bg.lineStyle(3,0x7d2d17,1).strokeRoundedRect(x,y,w,h,10)
+    bg.setInteractive(new Phaser.Geom.Rectangle(x,y,w,h),Phaser.Geom.Rectangle.Contains)
+    bg.input.cursor='pointer'
+    bg.on('pointerdown',()=>restart())
+    this.add.text(x+w/2,y+h/2,'RESTART',{
+      fontFamily:'Arial Black, Arial',fontSize:'14px',color:'#7d2d17'
+    }).setOrigin(.5).setDepth(21)
   }
 
   updateSlingshot(delta){
@@ -243,6 +317,7 @@ class GameScene extends Phaser.Scene {
     if(cup.getData('scored')) return
     cup.setData('scored',true)
     score.value=Math.min(8000,score.value+100)
+    this.updateScoreboard()
 
     const x=cup.x,y=cup.y
     this.cups=this.cups.filter(c => c!==cup)
@@ -269,6 +344,7 @@ class GameScene extends Phaser.Scene {
     } else {
       message.value=`${score.value.toLocaleString()} / 8,000 cups! Keep going!`
     }
+    this.updateMessage()
   }
 
   celebrate(){
@@ -310,6 +386,7 @@ class GameScene extends Phaser.Scene {
     } else {
       message.value = 'Pull the curry puff backwards and release!'
     }
+    this.updateMessage()
   }
 
   drawSlingshot(){
@@ -378,13 +455,34 @@ class GameScene extends Phaser.Scene {
 }
 
 function startGame(){
+  // Width stays the standard 1200 design reference so every element's
+  // position (slingshot, cup mountain, HUD) keeps the same relative layout
+  // on every device. Height only grows beyond the base 650 when the device
+  // is proportionally taller than that — the extra room is just more open
+  // sky above the action (the scene already extends the flat sky colour to
+  // fill H, see below), not a stretched or cropped layout. FIT then scales
+  // that design to fit the device with no overflow in either dimension.
+  const designWidth = 1500
+  const baseHeight = 800
+  const deviceAspect = window.innerHeight / window.innerWidth
+  const designHeight = Math.max(baseHeight, Math.round(designWidth * deviceAspect))
+
+  // Cap at the background art's native resolution (2172px wide) so the
+  // scene is never stretched past its source pixels and turns soft.
+  const maxWidth = 2172
+  const maxHeight = Math.round(maxWidth * (designHeight / designWidth))
+
   game = new Phaser.Game({
     type:Phaser.AUTO,
     parent:gameHost.value,
-    width:1200,height:650,
+    width:designWidth,height:baseHeight,
     backgroundColor:'#7bd2f5',
     physics:{default:'matter',matter:{gravity:{y:1.05},enableSleeping:true,debug:false}},
-    scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
+    scale:{
+      mode:Phaser.Scale.FIT,
+      autoCenter:Phaser.Scale.CENTER_BOTH,
+      max:{width:maxWidth,height:maxHeight}
+    },
     scene:[GameScene]
   })
 }
@@ -400,30 +498,8 @@ onBeforeUnmount(()=>game?.destroy(true))
 </script>
 
 <template>
-  <main class="page">
-    <section class="hero">
-      <div>
-        <p class="eyebrow">THONG KEE CELEBRATION GAME</p>
-        <h1>8,000 Cups Kopi Tarik Challenge</h1>
-        <p>Pull the curry puff, smash the mountain of kopi cups and race toward the 8,000-point milestone.</p>
-      </div>
-      <div class="scoreboard">
-        <div><small>SCORE</small><strong>{{ score.toLocaleString() }}</strong><span>/ 8,000</span></div>
-        <div><small>SHOTS</small><strong>{{ shots }} / {{ maxShots }}</strong></div>
-      </div>
-    </section>
-
-    <div class="progress"><div :style="{width:(score/80)+'%'}"></div></div>
-
-    <section class="game-shell">
-      <div ref="gameHost" class="game"></div>
-      <div class="status">{{ message }}</div>
-    </section>
-
-    <section class="bottom">
-      <p><strong>How to play:</strong> drag the curry puff backwards from the slingshot and release. Each destroyed cup is worth 100 points. You have {{ maxShots }} shots to destroy as many of the 80 cups as you can.</p>
-      <button @click="restart">Restart Game</button>
-    </section>
+  <main class="stage">
+    <div ref="gameHost" class="game"></div>
 
     <div v-if="showEndScreen" class="end-overlay">
       <div class="end-card">
