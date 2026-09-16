@@ -27,6 +27,7 @@ class GameScene extends Phaser.Scene {
     this.load.audio('bgm',asset('assets/sounds/bgm.mp3'))
   }
 
+  
   create(){
     const W = this.scale.width, H = this.scale.height
     this.groundY = H - 68
